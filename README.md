@@ -23,3 +23,25 @@ Sistema avanzado de VPN con ofuscación, rotación automática y kill switch par
 - Notificaciones de estado
 
 ## 📁 Estructura del Proyecto
+
+vpn-advanced/
+├── configs/ # Configuraciones VPN
+├── scripts/ # Scripts principales
+├── logs/ # Logs del sistema
+├── lists/ # Listas de configuración
+├── backups/ # Backups de reglas
+└── README.md # Esta documentación
+
+## 📦 Dependencias Requeridas
+
+# Paquetes base
+pkg install python bash curl wget iptables openssl
+
+# Herramientas VPN
+pkg install openvpn wireguard-tools shadowsocks-libev
+
+# Python dependencies
+pip install requests psutil schedule ping3
+
+# Monitoreo
+pkg install net-tools dnsutils nmap
