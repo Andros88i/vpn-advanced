@@ -1,20 +1,19 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
+# =========================================================
+# CONFIGURACIÓN
+# =========================================================
+HOST="127.0.0.1"
+PORT="3333"
+IMG="/data/data/com.termux/files/home/storage/pictures/Anonymus.png"
+
 # ============================================
-# VPN MANAGER ADVANCED - Termux
 # Características:
 # 1. Ofuscación Shadowsocks/Stunnel
 # 2. Rotación dinámica de configuraciones
 # 3. Kill Switch con iptables
 # 4. DNS seguro + bloqueo IPv6
 # ============================================
-
- # =========================================================
-# CONFIGURACIÓN
-# =========================================================
-HOST="127.0.0.1"
-PORT="3333"
-IMG="/data/data/com.termux/files/home/storage/pictures/Anonymus.png"
 
 CONFIG_DIR="$HOME/vpn-advanced"
 LOG_FILE="$CONFIG_DIR/logs/vpn.log"
@@ -43,7 +42,7 @@ fi
 
 echo
 echo -e "${LRED}      [+] CREADOR : Andro_Os${NC}"
-echo -e "${LRED}      [+] PROYECTO: Geo-Auto Final${NC}"
+echo -e "${LRED}      [+] PROYECTO: VPN MANAGER ADVANCED - Termux${NC}"
 echo -e "${LRED}      [+] ESTADO  : ${GREEN}ACTIVO${NC}"
 echo -e "${LRED}=================================================${NC}"
 
