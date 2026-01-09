@@ -1,0 +1,4 @@
+configs/*.ovpn
+configs/*.conf
+logs/*
+*.pem
