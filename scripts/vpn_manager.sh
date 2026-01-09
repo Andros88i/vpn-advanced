@@ -9,8 +9,12 @@
 # 4. DNS seguro + bloqueo IPv6
 # ============================================
 
-# MOSTRAR IMAGEN PNG - REEMPLAZA ESTA LÍNEA
-# echo -e "\033]1337;File=name=TU_IMAGEN.png;inline=1:$(base64 -w0 TU_IMAGEN.png)\a"
+ # =========================================================
+# CONFIGURACIÓN
+# =========================================================
+HOST="127.0.0.1"
+PORT="3333"
+IMG="/data/data/com.termux/files/home/storage/pictures/Anonymus.png"
 
 CONFIG_DIR="$HOME/vpn-advanced"
 LOG_FILE="$CONFIG_DIR/logs/vpn.log"
@@ -25,6 +29,23 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
+
+# =========================================================
+# BANNER (IMAGEN REAL)
+# =========================================================
+clear
+
+if command -v chafa >/dev/null 2>&1 && [ -f "$IMG" ]; then
+    chafa --center=on --size=60x30 "$IMG"
+else
+    echo -e "${RED}[!] No se pudo cargar la imagen o chafa no está instalado${NC}"
+fi
+
+echo
+echo -e "${LRED}      [+] CREADOR : Andro_Os${NC}"
+echo -e "${LRED}      [+] PROYECTO: Geo-Auto Final${NC}"
+echo -e "${LRED}      [+] ESTADO  : ${GREEN}ACTIVO${NC}"
+echo -e "${LRED}=================================================${NC}"
 
 # Inicializar directorios
 init_directories() {
