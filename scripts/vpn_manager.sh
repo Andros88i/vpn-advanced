@@ -9,6 +9,9 @@
 # 4. DNS seguro + bloqueo IPv6
 # ============================================
 
+# MOSTRAR IMAGEN PNG - REEMPLAZA ESTA LÍNEA
+# echo -e "\033]1337;File=name=TU_IMAGEN.png;inline=1:$(base64 -w0 TU_IMAGEN.png)\a"
+
 CONFIG_DIR="$HOME/vpn-advanced"
 LOG_FILE="$CONFIG_DIR/logs/vpn.log"
 CONFIG_LIST="$CONFIG_DIR/lists/config_list.txt"
