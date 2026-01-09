@@ -279,22 +279,15 @@ monitor_connection() {
     done
 }
 
-# =========================================================
-# BANNER (IMAGEN REAL)
-# =========================================================
-clear
+# ============================================
+# MENÚ PRINCIPAL
+# ============================================
 
-if command -v chafa >/dev/null 2>&1 && [ -f "$IMG" ]; then
-    chafa --center=on --size=60x30 "$IMG"
-else
-    echo -e "${RED}[!] No se pudo cargar la imagen o chafa no está instalado${NC}"
-fi
-
-    echo
-    echo -e "${LRED}      [+] CREADOR : Andro_Os${NC}"
-    echo -e "${LRED}      [+] PROYECTO: VPN MANAGER ADVANCED - Termux${NC}"
-    echo -e "${LRED}      [+] ESTADO  : ${GREEN}ACTIVO${NC}"
-    echo -e "${LRED}=================================================${NC}"
+show_menu() {
+    clear
+    echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║   VPN MANAGER ADVANCED - TERMUX      ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
     echo ""
     echo "1) Iniciar VPN con ofuscación"
     echo "2) Iniciar rotación automática"
