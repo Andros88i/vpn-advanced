@@ -1,4 +1,85 @@
+# ============================================
+# VPN ADVANCED - GITIGNORE
+# ============================================
+
+# Configuraciones personales
 configs/*.ovpn
 configs/*.conf
+configs/*.json
+configs/*.pem
+configs/*.crt
+configs/*.key
+configs/*.secret
+
+# Archivos de autenticación
+**/auth.txt
+**/credentials.txt
+**/pass.txt
+**/*.pass
+**/*.cred
+
+# Logs y datos temporales
 logs/*
-*.pem
+!logs/.gitkeep
+*.log
+*.tmp
+*.temp
+
+# Backups
+backups/*
+!backups/.gitkeep
+
+# Estado del sistema
+*.pid
+*.state
+*.lock
+.cache/
+
+# Archivos de sesión
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Entornos virtuales
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de estadísticas personales
+**/*_stats.json
+**/usage.json
+
+# Whitelists personalizadas
+lists/whitelist.local.txt
+lists/configs.local.txt
+
+# Certificados y claves
+*.p12
+*.pfx
+*.cer
+*.der
+
+# WireGuard keys
+*.private
+*.public
