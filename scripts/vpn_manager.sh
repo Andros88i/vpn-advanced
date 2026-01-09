@@ -7,6 +7,7 @@
 # 2. Rotación dinámica de configuraciones
 # 3. Kill Switch con iptables
 # 4. DNS seguro + bloqueo IPv6
+# 5. VPN Nativo Termux (sin root)
 # ============================================
 
 CONFIG_DIR="$HOME/vpn-advanced"
@@ -16,12 +17,58 @@ WHITELIST="$CONFIG_DIR/lists/whitelist.txt"
 CURRENT_CONFIG=""
 ROTATION_TIME=300  # 5 minutos (en segundos)
 
+# =========================================================
+# CONFIGURACIÓN
+# =========================================================
+IMG="/data/data/com.termux/files/home/storage/pictures/Anonymus.png"
+
 # Colores para output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
+
+# ============================================
+# VPN NATIVO TERMUX (SIN ROOT)
+# ============================================
+
+start_termux_vpn() {
+    log_message "Iniciando VPN nativo de Termux..."
+    
+    # Ruta al cliente VPN
+    local vpn_client="$CONFIG_DIR/scripts/termux_vpn.sh"
+    
+    # Si no existe, mostrar mensaje
+    if [ ! -f "$vpn_client" ]; then
+        log_message "${YELLOW}Cliente VPN nativo no encontrado${NC}"
+        echo ""
+        echo "📦 Para usar VPN sin root, necesitas:"
+        echo "1. Crear el archivo: $vpn_client"
+        echo "2. Agregar el código del cliente VPN"
+        echo "3. Dar permisos: chmod +x $vpn_client"
+        echo ""
+        echo "📄 El código está disponible como 'termux_vpn_client.sh'"
+        echo "📋 Guárdalo en la ubicación indicada"
+        echo ""
+        read -p "Presiona Enter para continuar..."
+        return 1
+    fi
+    
+    # Verificar si es ejecutable
+    if [ ! -x "$vpn_client" ]; then
+        log_message "${YELLOW}El cliente VPN no es ejecutable${NC}"
+        echo "Ejecuta: chmod +x $vpn_client"
+        return 1
+    fi
+    
+    # Ejecutar el cliente VPN
+    log_message "Ejecutando cliente VPN nativo..."
+    bash "$vpn_client" menu
+    
+    log_message "VPN nativo finalizado"
+    return 0
+}
 
 # Inicializar directorios
 init_directories() {
@@ -284,18 +331,29 @@ monitor_connection() {
 # ============================================
 
 show_menu() {
+    
     clear
-    echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║   VPN MANAGER ADVANCED - TERMUX      ║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
+
+if command -v chafa >/dev/null 2>&1 && [ -f "$IMG" ]; then
+    chafa --center=on --size=60x30 "$IMG"
+else
+    echo -e "${RED}[!] No se pudo cargar la imagen o chafa no está instalado${NC}"
+fi
+
+    echo
+    echo -e "${LRED}      [+] CREADOR : Andro_Os${NC}"
+    echo -e "${LRED}      [+] PROYECTO: VPN MANAGER ADVANCED - TERMUX${NC}"
+    echo -e "${LRED}      [+] ESTADO  : ${GREEN}ACTIVO${NC}"
+    echo -e "${LRED}=================================================${NC}"
     echo ""
     echo "1) Iniciar VPN con ofuscación"
     echo "2) Iniciar rotación automática"
-    echo "3) Detener todos los servicios"
-    echo "4) Ver estado de conexión"
-    echo "5) Agregar configuración"
-    echo "6) Configurar Kill Switch"
-    echo "7) Salir"
+    echo "3) VPN Nativo Termux (sin root)"
+    echo "4) Detener todos los servicios"
+    echo "5) Ver estado de conexión"
+    echo "6) Agregar configuración"
+    echo "7) Configurar Kill Switch"
+    echo "8) Salir"
     echo ""
     read -p "Selecciona una opción: " choice
     
@@ -313,23 +371,26 @@ show_menu() {
             monitor_connection &
             ;;
         3)
+            start_termux_vpn
+            ;;
+        4)
             stop_vpn_connection
             disable_killswitch
             ;;
-        4)
+        5)
             if check_connection; then
                 echo -e "${GREEN}✓ Conectado${NC}"
             else
                 echo -e "${RED}✗ Desconectado${NC}"
             fi
             ;;
-        5)
+        6)
             nano $CONFIG_LIST
             ;;
-        6)
+        7)
             setup_killswitch
             ;;
-        7)
+        8)
             stop_vpn_connection
             disable_killswitch
             exit 0
