@@ -210,4 +210,219 @@ class VPNRotator:
             config['failures'] += 1
             return False
     
-    def
+    def select_best_config(self):
+        """Seleccionar la mejor configuración disponible"""
+        all_configs = self.priority_configs + self.configs
+        
+        # Filtrar configuraciones con muchas fallas
+        valid_configs = [c for c in all_configs if c['failures'] < self.max_failures]
+        
+        if not valid_configs:
+            print("⚠️  Todas las configuraciones tienen muchas fallas, reseteando...")
+            for c in all_configs:
+                c['failures'] = 0
+            valid_configs = all_configs
+        
+        # Ordenar por prioridad (mayor primero) y luego por latencia
+        valid_configs.sort(key=lambda x: (-x['priority'], x['latency']))
+        
+        # Evitar usar la misma configuración si hay alternativas
+        if (self.current_config and len(valid_configs) > 1 and 
+            valid_configs[0]['path'] == self.current_config['path']):
+            return valid_configs[1]
+        
+        return valid_configs[0] if valid_configs else None
+    
+    def rotate(self):
+        """Realizar rotación de configuración"""
+        print(f"\n{'='*50}")
+        print(f"🔄 Rotación programada - {datetime.now().strftime('%H:%M:%S')}")
+        print(f"{'='*50}")
+        
+        # Seleccionar mejor configuración
+        best_config = self.select_best_config()
+        
+        if not best_config:
+            print("❌ No hay configuraciones disponibles")
+            return
+        
+        print(f"🎯 Seleccionada: {os.path.basename(best_config['path'])}")
+        print(f"   Prioridad: {best_config['priority']}")
+        print(f"   Fallos previos: {best_config['failures']}")
+        print(f"   Último uso: {best_config['last_used']}")
+        
+        # Detener conexión actual
+        self.stop_current_vpn()
+        
+        # Iniciar nueva conexión
+        if self.start_vpn(best_config):
+            print("✅ Rotación exitosa")
+            
+            # Actualizar estadísticas
+            stats_key = os.path.basename(best_config['path'])
+            if stats_key not in self.config_stats:
+                self.config_stats[stats_key] = {'uses': 0, 'total_latency': 0}
+            
+            self.config_stats[stats_key]['uses'] += 1
+            self.config_stats[stats_key]['total_latency'] += best_config['latency']
+            self.save_stats()
+        else:
+            print("❌ Rotación fallida, reintentando...")
+            time.sleep(2)
+            self.rotate()  # Reintentar
+    
+    def continuous_monitoring(self):
+        """Monitoreo continuo de la conexión"""
+        def monitor():
+            while True:
+                if self.current_config:
+                    # Probar conexión actual
+                    if not self.test_connection(self.current_config):
+                        print("⚠️  Conexión actual falló, rotando...")
+                        self.rotate()
+                
+                time.sleep(60)  # Verificar cada minuto
+        
+        thread = threading.Thread(target=monitor, daemon=True)
+        thread.start()
+    
+    def run_scheduled_rotation(self):
+        """Ejecutar rotaciones programadas"""
+        # Rotar cada X minutos
+        schedule.every(self.rotation_interval).seconds.do(self.rotate)
+        
+        # Rotación inicial
+        self.rotate()
+        
+        print(f"\n⏰ Rotación programada cada {self.rotation_interval} segundos")
+        print("📊 Monitoreo continuo activado")
+        print("🛑 Presiona Ctrl+C para detener\n")
+        
+        # Iniciar monitoreo continuo
+        self.continuous_monitoring()
+        
+        try:
+            while True:
+                schedule.run_pending()
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n👋 Deteniendo rotador...")
+            self.stop_current_vpn()
+    
+    def test_all_configs(self):
+        """Probar todas las configuraciones"""
+        print("\n🧪 Probando todas las configuraciones...")
+        
+        all_configs = self.priority_configs + self.configs
+        results = []
+        
+        for config in all_configs:
+            print(f"\n🔍 Probando: {os.path.basename(config['path'])}")
+            
+            latency = self.test_latency(config)
+            config['latency'] = latency
+            
+            if latency < 500:
+                status = "✅ OK"
+            elif latency < 1000:
+                status = "⚠️  Lento"
+            else:
+                status = "❌ Inalcanzable"
+            
+            results.append({
+                'config': os.path.basename(config['path']),
+                'latency': f"{latency}ms",
+                'status': status,
+                'priority': config['priority']
+            })
+            
+            print(f"   Latencia: {latency}ms - {status}")
+        
+        # Mostrar resumen
+        print("\n" + "="*50)
+        print("📊 RESUMEN DE PRUEBAS")
+        print("="*50)
+        
+        for result in sorted(results, key=lambda x: x['latency']):
+            print(f"{result['status']} {result['config']}: {result['latency']} (Pri: {result['priority']})")
+    
+    def show_stats(self):
+        """Mostrar estadísticas históricas"""
+        print("\n📈 ESTADÍSTICAS DE USO")
+        print("="*50)
+        
+        if not self.config_stats:
+            print("No hay estadísticas registradas")
+            return
+        
+        for config_name, stats in self.config_stats.items():
+            avg_latency = stats['total_latency'] / stats['uses'] if stats['uses'] > 0 else 0
+            print(f"📁 {config_name}:")
+            print(f"   Usos: {stats['uses']}")
+            print(f"   Latencia promedio: {avg_latency:.2f}ms")
+            print()
+
+def main():
+    """Función principal"""
+    print("""
+    ╔══════════════════════════════════════╗
+    ║   ROTADOR AVANZADO DE VPN            ║
+    ║   Balanceo de carga + Failover       ║
+    ╚══════════════════════════════════════╝
+    """)
+    
+    rotator = VPNRotator()
+    
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "test":
+            rotator.test_all_configs()
+        elif sys.argv[1] == "stats":
+            rotator.show_stats()
+        elif sys.argv[1] == "rotate":
+            rotator.rotate()
+        elif sys.argv[1] == "once":
+            rotator.rotate()
+            time.sleep(5)
+        elif sys.argv[1].isdigit():
+            rotator.rotation_interval = int(sys.argv[1])
+            rotator.run_scheduled_rotation()
+    else:
+        # Menú interactivo
+        while True:
+            print("\n" + "="*50)
+            print("MENÚ PRINCIPAL")
+            print("="*50)
+            print("1) Iniciar rotación automática")
+            print("2) Rotar una vez")
+            print("3) Probar todas las configuraciones")
+            print("4) Mostrar estadísticas")
+            print("5) Configurar intervalo (segundos)")
+            print("6) Salir")
+            print(f"\nIntervalo actual: {rotator.rotation_interval}s")
+            
+            choice = input("\nSelecciona opción: ").strip()
+            
+            if choice == "1":
+                rotator.run_scheduled_rotation()
+                break
+            elif choice == "2":
+                rotator.rotate()
+            elif choice == "3":
+                rotator.test_all_configs()
+            elif choice == "4":
+                rotator.show_stats()
+            elif choice == "5":
+                try:
+                    interval = int(input("Nuevo intervalo (segundos): "))
+                    rotator.rotation_interval = interval
+                    print(f"✅ Intervalo cambiado a {interval}s")
+                except ValueError:
+                    print("❌ Valor inválido")
+            elif choice == "6":
+                print("👋 Saliendo...")
+                break
+            else:
+                print("❌ Opción inválida")
+
+if __name__ == "__main__":
+    main()
