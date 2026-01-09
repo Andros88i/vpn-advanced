@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ============================================
-# VPN MANAGER + TUNNELBEAR INTEGRATION
+# VPN MANAGER - CONTROL DE APPS EXTERNAS
 # ============================================
 
 CONFIG_DIR="$HOME/vpn-advanced"
@@ -14,140 +14,261 @@ IMG="/data/data/com.termux/files/home/storage/pictures/Anonymus.png"
 
 # Colores
 GREEN='\033[0;32m'
+RED='\033[0;31m'
 BLUE='\033[0;34m'
-NC='\033[0m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
 
 log_message() {
     echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> $LOG_FILE
 }
 
 # ============================================
-# FUNCIONES CON TUNNELBEAR
+# DETECCIÓN DE TUNNELBEAR MOD
 # ============================================
 
-check_tunnelbear_installed() {
-    if pm list packages | grep -q "com.tunnelbear.android"; then
-        return 0
-    else
-        echo "❌ TunnelBear no instalado"
-        echo "📥 Descárgalo de Play Store: https://play.google.com/store/apps/details?id=com.tunnelbear.android"
-        return 1
-    fi
-}
-
-open_tunnelbear() {
-    log_message "Abriendo TunnelBear..."
-    am start -n com.tunnelbear.android/.ui.SplashActivity
-    sleep 3
-}
-
-connect_tunnelbear() {
-    log_message "Conectando TunnelBear..."
+detect_tunnelbear_mod() {
+    echo "🔍 Buscando TunnelBear MOD..."
     
-    # Método 1: Intentar usar accesibilidad (necesita config)
-    if command -v termux-notification >/dev/null 2>&1; then
-        termux-notification -t "Conectando VPN" \
-            -c "Por favor, activa TunnelBear manualmente"
-    fi
+    # Buscar paquete por nombres comunes de mods
+    local package_names=(
+        "com.tunnelbear.android"
+        "com.tunnelbear.mod"
+        "tunnelbear.mod"
+        "com.tunnelbear.premium"
+    )
     
-    # Método 2: Abrir y esperar conexión manual
-    open_tunnelbear
-    
-    echo "========================================"
-    echo "🐻 POR FAVOR:"
-    echo "1. Abre TunnelBear"
-    echo "2. Selecciona país"
-    echo "3. Activa el interruptor de VPN"
-    echo "4. El kill switch DE TUNNELBEAR se activará automáticamente"
-    echo "========================================"
-    
-    read -p "Presiona Enter cuando estés conectado..."
-}
-
-check_vpn_active() {
-    # Verificar si hay VPN activa (TunnelBear u otra)
-    if ifconfig | grep -q "tun0"; then
-        return 0
-    elif ip addr show | grep -q "tun"; then
-        return 0
-    else
-        # Verificar con netstat
-        if netstat -rn | grep -q "tun"; then
+    for package in "${package_names[@]}"; do
+        if pm list packages | grep -qi "$package"; then
+            echo "✅ Encontrado: $package"
+            TUNNELBEAR_PACKAGE=$(pm list packages | grep -i "$package" | head -1 | cut -d: -f2)
             return 0
         fi
+    done
+    
+    # Buscar en directorio de APKs
+    if ls ~/storage/downloads/*tunnelbear*apk 2>/dev/null; then
+        echo "📦 APK encontrado en Downloads"
+        return 0
     fi
+    
+    echo "❌ TunnelBear MOD no encontrado"
     return 1
 }
 
 # ============================================
-# ROTACIÓN SIMULADA CON TUNNELBEAR
+# CONTROL DE LA APP INSTALADA
 # ============================================
 
-rotate_tunnelbear() {
-    log_message "Sugiriendo cambio de servidor en TunnelBear..."
+start_tunnelbear_app() {
+    log_message "Iniciando TunnelBear MOD..."
     
-    # Lista de países sugeridos
-    countries=("United States" "Canada" "Germany" "Japan" "United Kingdom" "Netherlands")
-    random_country=${countries[$RANDOM % ${#countries[@]}]}
+    # Intentar diferentes activities
+    local activities=(
+        "com.tunnelbear.android.ui.SplashActivity"
+        "com.tunnelbear.android.MainActivity"
+        "com.tunnelbear.android.HomeActivity"
+    )
     
-    echo "🔄 Sugerencia: Cambia a $random_country en TunnelBear"
+    for activity in "${activities[@]}"; do
+        if am start -n "$TUNNELBEAR_PACKAGE/$activity" 2>/dev/null; then
+            log_message "✅ App iniciada: $activity"
+            return 0
+        fi
+    done
     
-    # Abrir TunnelBear para cambio manual
-    open_tunnelbear
+    # Intentar abrir solo el paquete
+    am start -n "$TUNNELBEAR_PACKAGE/.MainActivity" ||
+    am start -a android.intent.action.MAIN -n "$TUNNELBEAR_PACKAGE/.LauncherActivity"
     
-    echo "========================================"
-    echo "🔄 MANUAL: En TunnelBear:"
-    echo "1. Toca 'Elige tu país oso'"
-    echo "2. Selecciona: $random_country"
-    echo "3. Espera a que se reconecte"
-    echo "========================================"
-    
-    read -p "Enter cuando hayas cambiado de país..."
+    log_message "⚠️  Abre TunnelBear MOD manualmente desde el menú de apps"
 }
 
-# ============================================
-# DNS Y SEGURIDAD COMPLEMENTARIA
-# ============================================
-
-configure_dns_no_root() {
-    log_message "Configurando DNS seguro..."
-    
-    # Cambiar DNS temporalmente (sin root)
-    echo "nameserver 9.9.9.9" > $PREFIX/etc/resolv.conf
-    echo "nameserver 1.1.1.1" >> $PREFIX/etc/resolv.conf
-    
-    # Usar herramientas de Termux para proxy DNS
-    if command -v dnsmasq >/dev/null 2>&1; then
-        log_message "Configurando dnsmasq local..."
-        echo "server=9.9.9.9" > $PREFIX/etc/dnsmasq.conf
-        echo "server=1.1.1.1" >> $PREFIX/etc/dnsmasq.conf
-        dnsmasq
+get_tunnelbear_status() {
+    # Verificar si la app está en primer plano
+    if dumpsys window windows | grep -q "$TUNNELBEAR_PACKAGE"; then
+        echo "📱 TunnelBear está en primer plano"
+        return 0
     fi
     
-    log_message "DNS configurado (localmente)"
+    # Verificar si está en segundo plano
+    if dumpsys activity activities | grep -q "$TUNNELBEAR_PACKAGE"; then
+        echo "🔄 TunnelBear está en segundo plano"
+        return 0
+    fi
+    
+    echo "❌ TunnelBear no está ejecutándose"
+    return 1
 }
 
 # ============================================
-# MONITOREO DE CONEXIÓN
+# INSTALACIÓN ALTERNATIVA EN TERMUX
 # ============================================
 
-monitor_connection_no_root() {
-    log_message "Iniciando monitor de conexión..."
+install_tunnelbear_in_termux() {
+    echo "🛠️  Métodos para 'instalar' VPN en Termux sin root:"
+    echo ""
+    echo "1. SSH Tunnel (recomendado):"
+    echo "   ssh -D 1080 -N usuario@servidor-ssh.com"
+    echo ""
+    echo "2. WireGuard (necesita kernel compatible):"
+    echo "   pkg install wireguard-tools"
+    echo "   wg-quick up tun0"
+    echo ""
+    echo "3. OpenVPN (puede funcionar sin root en algunos casos):"
+    echo "   pkg install openvpn"
+    echo "   openvpn --config config.ovpn"
+    echo ""
+    echo "4. Shadowsocks (sin root):"
+    echo "   pip install shadowsocks"
+    echo "   sslocal -s servidor.com -p 8388 -k password -m aes-256-cfb"
+    
+    read -p "¿Quieres configurar SSH Tunnel? (s/n): " choice
+    if [[ "$choice" == "s" ]]; then
+        setup_ssh_tunnel
+    fi
+}
+
+setup_ssh_tunnel() {
+    echo "🔧 Configurando SSH Tunnel..."
+    
+    read -p "Servidor SSH: " ssh_server
+    read -p "Usuario: " ssh_user
+    read -p "Puerto (22): " ssh_port
+    ssh_port=${ssh_port:-22}
+    
+    # Crear script de conexión
+    cat > ~/vpn-advanced/scripts/ssh_tunnel.sh << EOF
+#!/data/data/com.termux/files/usr/bin/bash
+# SSH Tunnel VPN
+
+echo "🌐 Conectando a $ssh_server..."
+ssh -D 1080 -f -C -q -N -o ServerAliveInterval=60 \\
+    -o ServerAliveCountMax=3 \\
+    -o ExitOnForwardFailure=yes \\
+    -o ConnectTimeout=30 \\
+    $ssh_user@$ssh_server -p $ssh_port
+
+if [ \$? -eq 0 ]; then
+    echo "✅ Tunnel SSH activado en socks5://127.0.0.1:1080"
+    
+    # Configurar proxy
+    export http_proxy="socks5://127.0.0.1:1080"
+    export https_proxy="socks5://127.0.0.1:1080"
+    
+    echo "🔧 Proxy configurado"
+    echo "📊 Para verificar: curl --socks5 127.0.0.1:1080 ifconfig.me"
+else
+    echo "❌ Error al conectar"
+fi
+EOF
+    
+    chmod +x ~/vpn-advanced/scripts/ssh_tunnel.sh
+    echo "✅ Script creado: ~/vpn-advanced/scripts/ssh_tunnel.sh"
+}
+
+# ============================================
+# VPN SIN ROOT DENTRO DE TERMUX
+# ============================================
+
+start_vpn_in_termux() {
+    echo "🔐 Opciones de VPN dentro de Termux (sin root):"
+    echo ""
+    echo "1. Proton VPN CLI (gratis, 3 países)"
+    echo "2. Outline (desde contenedor Docker)"
+    echo "3. Tor + Proxy"
+    echo "4. HTTP/SOCKS5 Proxy"
+    
+    read -p "Elige opción: " vpn_choice
+    
+    case $vpn_choice in
+        1)
+            install_protonvpn_cli
+            ;;
+        2)
+            install_outline
+            ;;
+        3)
+            install_tor_proxy
+            ;;
+        4)
+            setup_proxy_manual
+            ;;
+    esac
+}
+
+install_protonvpn_cli() {
+    echo "📦 Instalando Proton VPN CLI..."
+    
+    # Instalar dependencias
+    pkg install python-pip openvpn dialog -y
+    pip install protonvpn-cli
+    
+    # Inicializar
+    protonvpn init
+    
+    echo "✅ Proton VPN instalado"
+    echo "🔌 Comandos:"
+    echo "   protonvpn connect    # Conectar"
+    echo "   protonvpn c -f       # Conexión más rápida"
+    echo "   protonvpn disconnect # Desconectar"
+}
+
+install_tor_proxy() {
+    echo "🧅 Configurando Tor Proxy..."
+    
+    pkg install tor torsocks -y
+    
+    # Configurar Tor
+    echo "SOCKSPort 9050" > $PREFIX/etc/tor/torrc
+    echo "Log notice file $PREFIX/var/log/tor/notices.log" >> $PREFIX/etc/tor/torrc
+    
+    # Iniciar Tor
+    tor &
+    
+    echo "✅ Tor ejecutándose en socks5://127.0.0.1:9050"
+    echo "🔧 Uso: torsocks curl ifconfig.me"
+}
+
+# ============================================
+# MONITOREO Y AUTOMATIZACIÓN
+# ============================================
+
+monitor_vpn_status() {
+    echo "📊 Monitoreando estado de VPN..."
     
     while true; do
-        if ! ping -c 1 -W 2 9.9.9.9 >/dev/null 2>&1; then
-            log_message "⚠️  Posible pérdida de conexión"
-            log_message "   TunnelBear kill switch debería activarse"
-            
-            # Notificación
-            if command -v termux-notification >/dev/null; then
-                termux-notification -t "Verifica VPN" \
-                    -c "La conexión podría estar expuesta"
-            fi
+        clear
+        echo "=== MONITOR VPN ==="
+        echo ""
+        
+        # Verificar conexión
+        if ping -c 1 -W 2 9.9.9.9 >/dev/null 2>&1; then
+            echo "🌐 Conexión: ✅"
+        else
+            echo "🌐 Conexión: ❌"
         fi
         
-        # Verificar cada 30 segundos
-        sleep 30
+        # Verificar IP pública
+        echo -n "🌍 IP pública: "
+        curl -s --max-time 5 ifconfig.me || echo "No disponible"
+        
+        # Verificar DNS
+        echo -n "🔍 DNS: "
+        dig +short google.com | head -1 || echo "No disponible"
+        
+        # Verificar fugas WebRTC (simplificado)
+        echo -n "🛡️  WebRTC: "
+        if curl -s --max-time 5 https://ipleak.net/json/ | grep -q "ip_address"; then
+            echo "⚠️  Verificar"
+        else
+            echo "✅"
+        fi
+        
+        echo ""
+        echo "⏳ Actualizando en 10 segundos (Ctrl+C para salir)..."
+        sleep 10
     done
 }
 
@@ -164,16 +285,23 @@ fi
 
     echo
     echo -e "${LRED}      [+] CREADOR : Andro_Os${NC}"
-    echo -e "${LRED}      [+] PROYECTO: VPN MANAGER + TUNNELBEAR${NC}"
+    echo -e "${LRED}      [+] PROYECTO: Geo-Auto Final${NC}"
     echo -e "${LRED}      [+] ESTADO  : ${GREEN}ACTIVO${NC}"
     echo -e "${LRED}=================================================${NC}"
-    echo "🐻 TunnelBear detectado: $(check_tunnelbear_installed && echo '✅' || echo '❌')"
+    
+    # Detectar TunnelBear MOD
+    if detect_tunnelbear_mod; then
+        echo "🐻 TunnelBear MOD: ✅ INSTALADO"
+    else
+        echo "🐻 TunnelBear MOD: ❌ NO ENCONTRADO"
+    fi
+    
     echo ""
-    echo "1) 🚀 Conectar TunnelBear (recomendado)"
-    echo "2) 🔄 Rotar servidor (cambiar país)"
-    echo "3) 📊 Ver estado de conexión"
-    echo "4) 🌐 Configurar DNS seguro"
-    echo "5) 🔍 Monitorear conexión en segundo plano"
+    echo "1) 🚀 Controlar TunnelBear MOD"
+    echo "2) 🔧 Configurar VPN dentro de Termux"
+    echo "3) 🌐 SSH Tunnel (recomendado)"
+    echo "4) 📊 Monitor de conexión"
+    echo "5) 🔍 Verificar fugas"
     echo "6) 📋 Ver logs"
     echo "7) 🚪 Salir"
     echo ""
@@ -182,33 +310,33 @@ fi
     
     case $choice in
         1)
-            check_tunnelbear_installed && connect_tunnelbear
-            ;;
-        2)
-            rotate_tunnelbear
-            ;;
-        3)
-            if check_vpn_active; then
-                echo -e "✅ VPN activa (probablemente TunnelBear)"
-                echo "🌍 Probando conexión..."
-                ping -c 2 9.9.9.9 | tail -2
+            if detect_tunnelbear_mod; then
+                start_tunnelbear_app
+                echo ""
+                echo "💡 Consejo: Activa el kill switch en TunnelBear MOD:"
+                echo "   Configuración → Vigilante → ACTIVAR"
             else
-                echo -e "❌ No hay VPN activa"
-                echo "🐻 Activa TunnelBear desde la app"
+                echo "❌ Instala TunnelBear MOD primero"
+                echo "📥 Descarga el APK y instálalo manualmente"
             fi
             ;;
+        2)
+            start_vpn_in_termux
+            ;;
+        3)
+            setup_ssh_tunnel
+            ;;
         4)
-            configure_dns_no_root
+            monitor_vpn_status
             ;;
         5)
-            monitor_connection_no_root &
-            echo "✅ Monitor activado en segundo plano"
+            check_leaks
             ;;
         6)
             [ -f "$LOG_FILE" ] && tail -20 "$LOG_FILE" || echo "No hay logs"
             ;;
         7)
-            echo "🐻 Gracias por usar TunnelBear + VPN Manager"
+            echo "👋 Hasta luego!"
             exit 0
             ;;
     esac
@@ -217,44 +345,34 @@ fi
     show_menu
 }
 
-# ============================================
-# INSTALACIÓN DE DEPENDENCIAS ÚTILES
-# ============================================
-
-install_recommended_tools() {
-    echo "📦 Instalando herramientas recomendadas..."
+check_leaks() {
+    echo "🔍 Verificando fugas..."
     
-    # Termux:API para notificaciones
-    pkg install termux-api -y
+    echo "1. Verificando IP..."
+    echo "   Sin proxy:"
+    curl -s --max-time 10 ifconfig.me
+    echo ""
     
-    # Herramientas de red
-    pkg install net-tools dnsutils curl -y
+    echo "2. Verificando DNS..."
+    dig +short myip.opendns.com @resolver1.opendns.com
     
-    # Python para scripts adicionales
-    pkg install python -y
-    pip install requests
+    echo "3. Verificando WebRTC (simplificado)..."
+    echo "   💡 Usa Firefox con privacy.resistFingerprinting=true"
     
-    echo "✅ Herramientas instaladas"
-    echo "📱 Ahora puedes recibir notificaciones del estado VPN"
+    echo ""
+    echo "📱 Para pruebas completas, usa:"
+    echo "   https://ipleak.net"
+    echo "   https://dnsleaktest.com"
 }
 
 # ============================================
 # INICIO
 # ============================================
 
-echo "🐻 VPN MANAGER con TunnelBear"
-echo "============================="
+echo "🔓 VPN MANAGER - MODO SIN ROOT"
+echo "==============================="
 
-# Verificar si TunnelBear está instalado
-if ! check_tunnelbear_installed; then
-    echo ""
-    echo "⚠️  Para mejor experiencia:"
-    echo "1. Instala TunnelBear desde Play Store"
-    echo "2. Activa su kill switch en configuración"
-    echo "3. Vuelve a ejecutar este script"
-    echo ""
-    read -p "¿Instalar herramientas de monitoreo? (s/n): " install_choice
-    [[ "$install_choice" == "s" ]] && install_recommended_tools
-fi
+# Crear directorios
+mkdir -p ~/vpn-advanced/{scripts,logs,configs}
 
 show_menu
