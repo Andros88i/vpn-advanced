@@ -1,0 +1,3 @@
+$HOME/vpn-advanced/configs/vpn1.ovpn
+$HOME/vpn-advanced/configs/vpn2.conf
+$HOME/vpn-advanced/configs/vpn3.ovpn
