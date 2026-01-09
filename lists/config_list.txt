@@ -1,0 +1,25 @@
+# ============================================
+# LISTA DE CONFIGURACIONES VPN PARA ROTACIÓN
+# Formato: /ruta/completa/al/archivo.config
+# ============================================
+
+# Configuraciones OpenVPN
+/data/data/com.termux/files/home/vpn-advanced/configs/servidor-usa.ovpn
+/data/data/com.termux/files/home/vpn-advanced/configs/servidor-alemania.ovpn
+/data/data/com.termux/files/home/vpn-advanced/configs/servidor-japon.ovpn
+/data/data/com.termux/files/home/vpn-advanced/configs/servidor-suecia.ovpn
+
+# Configuraciones WireGuard
+/data/data/com.termux/files/home/vpn-advanced/configs/wg-us-east.conf
+/data/data/com.termux/files/home/vpn-advanced/configs/wg-europe.conf
+/data/data/com.termux/files/home/vpn-advanced/configs/wg-asia.conf
+
+# Configuraciones especiales
+/data/data/com.termux/files/home/vpn-advanced/configs/tor-over-vpn.ovpn
+/data/data/com.termux/files/home/vpn-advanced/configs/double-vpn.ovpn
+
+# Prioridad alta (se usan primero)
+#PRIORITY:9 /data/data/com.termux/files/home/vpn-advanced/configs/trusted-server.ovpn
+
+# Comentadas (no se usan)
+# /data/data/com.termux/files/home/vpn-advanced/configs/old-server.ovpn
