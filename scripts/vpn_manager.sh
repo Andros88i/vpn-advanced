@@ -1,13 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# =========================================================
-# CONFIGURACIÓN
-# =========================================================
-HOST="127.0.0.1"
-PORT="3333"
-IMG="/data/data/com.termux/files/home/storage/pictures/Anonymus.png"
-
 # ============================================
+# VPN MANAGER ADVANCED - Termux
 # Características:
 # 1. Ofuscación Shadowsocks/Stunnel
 # 2. Rotación dinámica de configuraciones
@@ -28,23 +22,6 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
-
-# =========================================================
-# BANNER (IMAGEN REAL)
-# =========================================================
-clear
-
-if command -v chafa >/dev/null 2>&1 && [ -f "$IMG" ]; then
-    chafa --center=on --size=60x30 "$IMG"
-else
-    echo -e "${RED}[!] No se pudo cargar la imagen o chafa no está instalado${NC}"
-fi
-
-echo
-echo -e "${LRED}      [+] CREADOR : Andro_Os${NC}"
-echo -e "${LRED}      [+] PROYECTO: VPN MANAGER ADVANCED - Termux${NC}"
-echo -e "${LRED}      [+] ESTADO  : ${GREEN}ACTIVO${NC}"
-echo -e "${LRED}=================================================${NC}"
 
 # Inicializar directorios
 init_directories() {
@@ -302,15 +279,22 @@ monitor_connection() {
     done
 }
 
-# ============================================
-# MENÚ PRINCIPAL
-# ============================================
+# =========================================================
+# BANNER (IMAGEN REAL)
+# =========================================================
+clear
 
-show_menu() {
-    clear
-    echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║   VPN MANAGER ADVANCED - TERMUX      ║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
+if command -v chafa >/dev/null 2>&1 && [ -f "$IMG" ]; then
+    chafa --center=on --size=60x30 "$IMG"
+else
+    echo -e "${RED}[!] No se pudo cargar la imagen o chafa no está instalado${NC}"
+fi
+
+    echo
+    echo -e "${LRED}      [+] CREADOR : Andro_Os${NC}"
+    echo -e "${LRED}      [+] PROYECTO: VPN MANAGER ADVANCED - Termux${NC}"
+    echo -e "${LRED}      [+] ESTADO  : ${GREEN}ACTIVO${NC}"
+    echo -e "${LRED}=================================================${NC}"
     echo ""
     echo "1) Iniciar VPN con ofuscación"
     echo "2) Iniciar rotación automática"
