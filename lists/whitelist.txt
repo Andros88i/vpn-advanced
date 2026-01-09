@@ -1,0 +1,64 @@
+# ============================================
+# WHITELIST - IPS/DOMINIOS PERMITIDOS
+# Estas conexiones funcionarán incluso sin VPN
+# ============================================
+
+# DIRECCIONES LOCALES
+192.168.0.0/16
+10.0.0.0/8
+172.16.0.0/12
+127.0.0.0/8
+
+# DNS DE CONFIANZA
+9.9.9.9
+149.112.112.112
+1.1.1.1
+1.0.0.1
+8.8.8.8
+8.8.4.4
+
+# SERVIDORES DE TIEMPO (NTP)
+pool.ntp.org
+time.google.com
+time.cloudflare.com
+
+# ACTUALIZACIONES DE SEGURIDAD
+security.debian.org
+security.ubuntu.com
+mirrors.termux.org
+
+# SERVIDORES TERMUX
+packages.termux.org
+grimler.se
+termux.net
+
+# VERIFICACIÓN DE CONECTIVIDAD (ping)
+1.1.1.1/32
+9.9.9.9/32
+
+# DOMINIOS CRÍTICOS (opcional, descomentar si es necesario)
+#api.telegram.org
+#raw.githubusercontent.com
+#github.com
+
+# EXCEPCIONES POR PUERTO (formato: IP:puerto)
+192.168.1.1:53    # DNS local
+10.0.0.1:443      # Gateway HTTPS
+
+# ============================================
+# REGLAS ESPECIALES
+# ============================================
+
+# Permitir ICMP (ping) solo a estas IPs
+-PROTO:ICMP 9.9.9.9
+-PROTO:ICMP 1.1.1.1
+
+# Bloquear pero permitir respuesta
+-ESTABLISHED,RELATED ACCEPT
+
+# ============================================
+# NOTAS:
+# 1. Las IPs en esta lista ignoran el Kill Switch
+# 2. Usar con precaución para no crear fugas
+# 3. Actualizar regularmente
+# ============================================
