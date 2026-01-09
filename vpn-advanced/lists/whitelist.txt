@@ -1,0 +1,4 @@
+# IPs/dominios permitidos incluso sin VPN
+192.168.1.0/24
+10.0.0.0/8
+# Agrega tus IPs confiables aquí
