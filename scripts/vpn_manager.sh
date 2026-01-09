@@ -1,378 +1,421 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ============================================
-# VPN MANAGER - CONTROL DE APPS EXTERNAS
+# VPN MANAGER ADVANCED - Termux
+# Características:
+# 1. Ofuscación Shadowsocks/Stunnel
+# 2. Rotación dinámica de configuraciones
+# 3. Kill Switch con iptables
+# 4. DNS seguro + bloqueo IPv6
 # ============================================
 
 CONFIG_DIR="$HOME/vpn-advanced"
 LOG_FILE="$CONFIG_DIR/logs/vpn.log"
+CONFIG_LIST="$CONFIG_DIR/lists/config_list.txt"
+WHITELIST="$CONFIG_DIR/lists/whitelist.txt"
+CURRENT_CONFIG=""
+ROTATION_TIME=300  # 5 minutos (en segundos)
 
-# =========================================================
-# CONFIGURACIÓN
-# =========================================================
-IMG="/data/data/com.termux/files/home/storage/pictures/Anonymus.png"
-
-# Colores
+# Colores para output
+RED='\033[0;31m'
 GREEN='\033[0;32m'
-RED='\033[0;31m'
-BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
-RED='\033[0;31m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
+# Inicializar directorios
+init_directories() {
+    mkdir -p $CONFIG_DIR/{configs,scripts,logs,lists}
+    touch $LOG_FILE $CONFIG_LIST $WHITELIST
+    
+    echo "VPN Manager iniciado: $(date)" >> $LOG_FILE
+    log_message "Sistema inicializado"
+}
+
+# Logging function
 log_message() {
     echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> $LOG_FILE
 }
 
 # ============================================
-# DETECCIÓN DE TUNNELBEAR MOD
+# KILL SWITCH CON IPTABLES
 # ============================================
 
-detect_tunnelbear_mod() {
-    echo "🔍 Buscando TunnelBear MOD..."
+setup_killswitch() {
+    log_message "Configurando Kill Switch..."
     
-    # Buscar paquete por nombres comunes de mods
-    local package_names=(
-        "com.tunnelbear.android"
-        "com.tunnelbear.mod"
-        "tunnelbear.mod"
-        "com.tunnelbear.premium"
-    )
+    # Flush existing rules
+    iptables -F
+    iptables -t nat -F
+    ip6tables -F
     
-    for package in "${package_names[@]}"; do
-        if pm list packages | grep -qi "$package"; then
-            echo "✅ Encontrado: $package"
-            TUNNELBEAR_PACKAGE=$(pm list packages | grep -i "$package" | head -1 | cut -d: -f2)
-            return 0
-        fi
-    done
+    # Establecer políticas por defecto (DROP todo)
+    iptables -P INPUT DROP
+    iptables -P OUTPUT DROP
+    iptables -P FORWARD DROP
+    ip6tables -P INPUT DROP
+    ip6tables -P OUTPUT DROP
+    ip6tables -P FORWARD DROP
     
-    # Buscar en directorio de APKs
-    if ls ~/storage/downloads/*tunnelbear*apk 2>/dev/null; then
-        echo "📦 APK encontrado en Downloads"
-        return 0
+    # Permitir loopback
+    iptables -A INPUT -i lo -j ACCEPT
+    iptables -A OUTPUT -o lo -j ACCEPT
+    
+    # Permitir conexiones establecidas y relacionadas
+    iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    
+    # Permitir DNS de confianza (Quad9, Cloudflare)
+    iptables -A OUTPUT -p udp --dport 53 -d 9.9.9.9 -j ACCEPT
+    iptables -A OUTPUT -p udp --dport 53 -d 1.1.1.1 -j ACCEPT
+    iptables -A OUTPUT -p tcp --dport 53 -d 9.9.9.9 -j ACCEPT
+    iptables -A OUTPUT -p tcp --dport 53 -d 1.1.1.1 -j ACCEPT
+    
+    # Whitelist de IPs/dominios
+    if [ -f "$WHITELIST" ]; then
+        while read -r line; do
+            [[ -z "$line" || "$line" =~ ^# ]] && continue
+            iptables -A OUTPUT -d "$line" -j ACCEPT
+        done < "$WHITELIST"
     fi
     
-    echo "❌ TunnelBear MOD no encontrado"
-    return 1
+    # Bloquear todo el tráfico IPv6
+    ip6tables -A INPUT -j DROP
+    ip6tables -A OUTPUT -j DROP
+    
+    log_message "Kill Switch activado"
+}
+
+disable_killswitch() {
+    log_message "Desactivando Kill Switch..."
+    
+    iptables -P INPUT ACCEPT
+    iptables -P OUTPUT ACCEPT
+    iptables -P FORWARD ACCEPT
+    ip6tables -P INPUT ACCEPT
+    ip6tables -P OUTPUT ACCEPT
+    ip6tables -P FORWARD ACCEPT
+    
+    iptables -F
+    iptables -t nat -F
+    ip6tables -F
+    
+    log_message "Kill Switch desactivado"
 }
 
 # ============================================
-# CONTROL DE LA APP INSTALADA
+# GESTIÓN DNS Y IPv6
 # ============================================
 
-start_tunnelbear_app() {
-    log_message "Iniciando TunnelBear MOD..."
+configure_dns() {
+    log_message "Configurando DNS seguro..."
     
-    # Intentar diferentes activities
-    local activities=(
-        "com.tunnelbear.android.ui.SplashActivity"
-        "com.tunnelbear.android.MainActivity"
-        "com.tunnelbear.android.HomeActivity"
-    )
+    # Configurar resolv.conf temporal
+    echo "nameserver 9.9.9.9" > /data/data/com.termux/files/usr/etc/resolv.conf
+    echo "nameserver 1.1.1.1" >> /data/data/com.termux/files/usr/etc/resolv.conf
     
-    for activity in "${activities[@]}"; do
-        if am start -n "$TUNNELBEAR_PACKAGE/$activity" 2>/dev/null; then
-            log_message "✅ App iniciada: $activity"
-            return 0
-        fi
-    done
+    # Deshabilitar IPv6
+    sysctl -w net.ipv6.conf.all.disable_ipv6=1
+    sysctl -w net.ipv6.conf.default.disable_ipv6=1
     
-    # Intentar abrir solo el paquete
-    am start -n "$TUNNELBEAR_PACKAGE/.MainActivity" ||
-    am start -a android.intent.action.MAIN -n "$TUNNELBEAR_PACKAGE/.LauncherActivity"
-    
-    log_message "⚠️  Abre TunnelBear MOD manualmente desde el menú de apps"
-}
-
-get_tunnelbear_status() {
-    # Verificar si la app está en primer plano
-    if dumpsys window windows | grep -q "$TUNNELBEAR_PACKAGE"; then
-        echo "📱 TunnelBear está en primer plano"
-        return 0
-    fi
-    
-    # Verificar si está en segundo plano
-    if dumpsys activity activities | grep -q "$TUNNELBEAR_PACKAGE"; then
-        echo "🔄 TunnelBear está en segundo plano"
-        return 0
-    fi
-    
-    echo "❌ TunnelBear no está ejecutándose"
-    return 1
+    # Bloquear IPv6 con iptables (ya hecho en killswitch)
+    log_message "DNS configurado e IPv6 deshabilitado"
 }
 
 # ============================================
-# INSTALACIÓN ALTERNATIVA EN TERMUX
+# OFUSCACIÓN CON SHADOWSOCKS/STUNNEL
 # ============================================
 
-install_tunnelbear_in_termux() {
-    echo "🛠️  Métodos para 'instalar' VPN en Termux sin root:"
-    echo ""
-    echo "1. SSH Tunnel (recomendado):"
-    echo "   ssh -D 1080 -N usuario@servidor-ssh.com"
-    echo ""
-    echo "2. WireGuard (necesita kernel compatible):"
-    echo "   pkg install wireguard-tools"
-    echo "   wg-quick up tun0"
-    echo ""
-    echo "3. OpenVPN (puede funcionar sin root en algunos casos):"
-    echo "   pkg install openvpn"
-    echo "   openvpn --config config.ovpn"
-    echo ""
-    echo "4. Shadowsocks (sin root):"
-    echo "   pip install shadowsocks"
-    echo "   sslocal -s servidor.com -p 8388 -k password -m aes-256-cfb"
+start_shadowsocks() {
+    local config="$CONFIG_DIR/configs/shadowsocks.json"
     
-    read -p "¿Quieres configurar SSH Tunnel? (s/n): " choice
-    if [[ "$choice" == "s" ]]; then
-        setup_ssh_tunnel
-    fi
+    if [ ! -f "$config" ]; then
+        log_message "Creando configuración Shadowsocks por defecto..."
+        cat > "$config" << EOF
+{
+    "server":"your-server-ip",
+    "server_port":8388,
+    "local_port":1080,
+    "password":"your-password",
+    "timeout":300,
+    "method":"chacha20-ietf-poly1305"
 }
-
-setup_ssh_tunnel() {
-    echo "🔧 Configurando SSH Tunnel..."
-    
-    read -p "Servidor SSH: " ssh_server
-    read -p "Usuario: " ssh_user
-    read -p "Puerto (22): " ssh_port
-    ssh_port=${ssh_port:-22}
-    
-    # Crear script de conexión
-    cat > ~/vpn-advanced/scripts/ssh_tunnel.sh << EOF
-#!/data/data/com.termux/files/usr/bin/bash
-# SSH Tunnel VPN
-
-echo "🌐 Conectando a $ssh_server..."
-ssh -D 1080 -f -C -q -N -o ServerAliveInterval=60 \\
-    -o ServerAliveCountMax=3 \\
-    -o ExitOnForwardFailure=yes \\
-    -o ConnectTimeout=30 \\
-    $ssh_user@$ssh_server -p $ssh_port
-
-if [ \$? -eq 0 ]; then
-    echo "✅ Tunnel SSH activado en socks5://127.0.0.1:1080"
-    
-    # Configurar proxy
-    export http_proxy="socks5://127.0.0.1:1080"
-    export https_proxy="socks5://127.0.0.1:1080"
-    
-    echo "🔧 Proxy configurado"
-    echo "📊 Para verificar: curl --socks5 127.0.0.1:1080 ifconfig.me"
-else
-    echo "❌ Error al conectar"
-fi
 EOF
+        log_message "${YELLOW}Edita $config con tus credenciales${NC}"
+        return 1
+    fi
     
-    chmod +x ~/vpn-advanced/scripts/ssh_tunnel.sh
-    echo "✅ Script creado: ~/vpn-advanced/scripts/ssh_tunnel.sh"
+    log_message "Iniciando Shadowsocks..."
+    ss-local -c "$config" -b 127.0.0.1 -l 1080 &
+    echo $! > /tmp/ss.pid
+}
+
+start_stunnel() {
+    local config="$CONFIG_DIR/configs/stunnel.conf"
+    
+    if [ ! -f "$config" ]; then
+        log_message "Creando configuración Stunnel por defecto..."
+        cat > "$config" << EOF
+[openvpn]
+client = yes
+accept = 127.0.0.1:1194
+connect = your-server:443
+verify = 2
+CAfile = /data/data/com.termux/files/usr/etc/tls/ca.crt
+cert = /data/data/com.termux/files/usr/etc/tls/client.crt
+key = /data/data/com.termux/files/usr/etc/tls/client.key
+EOF
+        log_message "${YELLOW}Edita $config con tus certificados${NC}"
+        return 1
+    fi
+    
+    log_message "Iniciando Stunnel..."
+    stunnel "$config" &
+    echo $! > /tmp/stunnel.pid
 }
 
 # ============================================
-# VPN SIN ROOT DENTRO DE TERMUX
+# ROTACIÓN DE CONFIGURACIONES
 # ============================================
 
-start_vpn_in_termux() {
-    echo "🔐 Opciones de VPN dentro de Termux (sin root):"
-    echo ""
-    echo "1. Proton VPN CLI (gratis, 3 países)"
-    echo "2. Outline (desde contenedor Docker)"
-    echo "3. Tor + Proxy"
-    echo "4. HTTP/SOCKS5 Proxy"
+rotate_configuration() {
+    local configs=($(cat "$CONFIG_LIST" 2>/dev/null))
     
-    read -p "Elige opción: " vpn_choice
+    if [ ${#configs[@]} -eq 0 ]; then
+        log_message "${RED}No hay configuraciones en la lista${NC}"
+        return 1
+    fi
     
-    case $vpn_choice in
-        1)
-            install_protonvpn_cli
-            ;;
-        2)
-            install_outline
-            ;;
-        3)
-            install_tor_proxy
-            ;;
-        4)
-            setup_proxy_manual
-            ;;
-    esac
-}
-
-install_protonvpn_cli() {
-    echo "📦 Instalando Proton VPN CLI..."
+    # Seleccionar configuración aleatoria
+    local random_index=$((RANDOM % ${#configs[@]}))
+    local new_config="${configs[$random_index]}"
     
-    # Instalar dependencias
-    pkg install python-pip openvpn dialog -y
-    pip install protonvpn-cli
+    if [ "$new_config" = "$CURRENT_CONFIG" ]; then
+        # Seleccionar la siguiente si es la misma
+        new_config="${configs[((random_index + 1) % ${#configs[@]})]}"
+    fi
     
-    # Inicializar
-    protonvpn init
+    log_message "Rotando a configuración: $new_config"
     
-    echo "✅ Proton VPN instalado"
-    echo "🔌 Comandos:"
-    echo "   protonvpn connect    # Conectar"
-    echo "   protonvpn c -f       # Conexión más rápida"
-    echo "   protonvpn disconnect # Desconectar"
-}
-
-install_tor_proxy() {
-    echo "🧅 Configurando Tor Proxy..."
+    # Detener conexión actual
+    stop_vpn_connection
     
-    pkg install tor torsocks -y
+    # Esperar para evitar fugas de DNS
+    sleep 2
     
-    # Configurar Tor
-    echo "SOCKSPort 9050" > $PREFIX/etc/tor/torrc
-    echo "Log notice file $PREFIX/var/log/tor/notices.log" >> $PREFIX/etc/tor/torrc
+    # Iniciar nueva configuración
+    start_vpn_connection "$new_config"
     
-    # Iniciar Tor
-    tor &
-    
-    echo "✅ Tor ejecutándose en socks5://127.0.0.1:9050"
-    echo "🔧 Uso: torsocks curl ifconfig.me"
+    CURRENT_CONFIG="$new_config"
+    log_message "${GREEN}Rotación completada${NC}"
 }
 
 # ============================================
-# MONITOREO Y AUTOMATIZACIÓN
+# GESTIÓN CONEXIÓN VPN
 # ============================================
 
-monitor_vpn_status() {
-    echo "📊 Monitoreando estado de VPN..."
+start_vpn_connection() {
+    local config="$1"
+    
+    if [[ "$config" == *.ovpn ]]; then
+        log_message "Iniciando OpenVPN: $config"
+        openvpn --config "$config" --auth-nocache --daemon &
+        echo $! > /tmp/openvpn.pid
+        
+    elif [[ "$config" == *.conf ]]; then
+        log_message "Iniciando WireGuard: $config"
+        wg-quick up "$config" 2>> $LOG_FILE &
+        echo $! > /tmp/wireguard.pid
+    fi
+    
+    # Verificar conexión
+    sleep 3
+    if check_connection; then
+        log_message "${GREEN}Conexión establecida${NC}"
+    else
+        log_message "${RED}Error en la conexión${NC}"
+        rotate_configuration
+    fi
+}
+
+stop_vpn_connection() {
+    # Detener procesos VPN
+    [ -f /tmp/openvpn.pid ] && kill $(cat /tmp/openvpn.pid) 2>/dev/null
+    [ -f /tmp/wireguard.pid ] && wg-quick down $(cat /tmp/wireguard.conf) 2>/dev/null
+    [ -f /tmp/ss.pid ] && kill $(cat /tmp/ss.pid) 2>/dev/null
+    [ -f /tmp/stunnel.pid ] && kill $(cat /tmp/stunnel.pid) 2>/dev/null
+    
+    rm -f /tmp/*.pid
+}
+
+check_connection() {
+    # Verificar conectividad
+    if ping -c 2 -W 3 9.9.9.9 >/dev/null 2>&1; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# ============================================
+# MONITOREO Y ROTACIÓN AUTOMÁTICA
+# ============================================
+
+monitor_connection() {
+    log_message "Iniciando monitor de conexión..."
     
     while true; do
-        clear
-        echo "=== MONITOR VPN ==="
-        echo ""
-        
-        # Verificar conexión
-        if ping -c 1 -W 2 9.9.9.9 >/dev/null 2>&1; then
-            echo "🌐 Conexión: ✅"
-        else
-            echo "🌐 Conexión: ❌"
+        if ! check_connection; then
+            log_message "${RED}Conexión perdida - Activando Kill Switch${NC}"
+            setup_killswitch
+            rotate_configuration
         fi
         
-        # Verificar IP pública
-        echo -n "🌍 IP pública: "
-        curl -s --max-time 5 ifconfig.me || echo "No disponible"
-        
-        # Verificar DNS
-        echo -n "🔍 DNS: "
-        dig +short google.com | head -1 || echo "No disponible"
-        
-        # Verificar fugas WebRTC (simplificado)
-        echo -n "🛡️  WebRTC: "
-        if curl -s --max-time 5 https://ipleak.net/json/ | grep -q "ip_address"; then
-            echo "⚠️  Verificar"
-        else
-            echo "✅"
-        fi
-        
-        echo ""
-        echo "⏳ Actualizando en 10 segundos (Ctrl+C para salir)..."
-        sleep 10
+        # Rotación programada cada X minutos
+        sleep $ROTATION_TIME
+        log_message "Rotación programada iniciada..."
+        rotate_configuration
     done
 }
 
-# =========================================================
-# BANNER (IMAGEN REAL)
-# =========================================================
-clear
+# ============================================
+# MENÚ PRINCIPAL
+# ============================================
 
-if command -v chafa >/dev/null 2>&1 && [ -f "$IMG" ]; then
-    chafa --center=on --size=60x30 "$IMG"
-else
-    echo -e "${RED}[!] No se pudo cargar la imagen o chafa no está instalado${NC}"
-fi
-
-    echo
-    echo -e "${LRED}      [+] CREADOR : Andro_Os${NC}"
-    echo -e "${LRED}      [+] PROYECTO: Geo-Auto Final${NC}"
-    echo -e "${LRED}      [+] ESTADO  : ${GREEN}ACTIVO${NC}"
-    echo -e "${LRED}=================================================${NC}"
-    
-    # Detectar TunnelBear MOD
-    if detect_tunnelbear_mod; then
-        echo "🐻 TunnelBear MOD: ✅ INSTALADO"
-    else
-        echo "🐻 TunnelBear MOD: ❌ NO ENCONTRADO"
-    fi
-    
+show_menu() {
+    clear
+    echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║   VPN MANAGER ADVANCED - TERMUX      ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
     echo ""
-    echo "1) 🚀 Controlar TunnelBear MOD"
-    echo "2) 🔧 Configurar VPN dentro de Termux"
-    echo "3) 🌐 SSH Tunnel (recomendado)"
-    echo "4) 📊 Monitor de conexión"
-    echo "5) 🔍 Verificar fugas"
-    echo "6) 📋 Ver logs"
-    echo "7) 🚪 Salir"
+    echo "1) Iniciar VPN con ofuscación"
+    echo "2) Iniciar rotación automática"
+    echo "3) Detener todos los servicios"
+    echo "4) Ver estado de conexión"
+    echo "5) Agregar configuración"
+    echo "6) Configurar Kill Switch"
+    echo "7) Salir"
     echo ""
-    
-    read -p "Selecciona: " choice
+    read -p "Selecciona una opción: " choice
     
     case $choice in
         1)
-            if detect_tunnelbear_mod; then
-                start_tunnelbear_app
-                echo ""
-                echo "💡 Consejo: Activa el kill switch en TunnelBear MOD:"
-                echo "   Configuración → Vigilante → ACTIVAR"
-            else
-                echo "❌ Instala TunnelBear MOD primero"
-                echo "📥 Descarga el APK y instálalo manualmente"
-            fi
+            setup_killswitch
+            configure_dns
+            start_shadowsocks
+            sleep 2
+            rotate_configuration
             ;;
         2)
-            start_vpn_in_termux
+            setup_killswitch
+            configure_dns
+            monitor_connection &
             ;;
         3)
-            setup_ssh_tunnel
+            stop_vpn_connection
+            disable_killswitch
             ;;
         4)
-            monitor_vpn_status
+            if check_connection; then
+                echo -e "${GREEN}✓ Conectado${NC}"
+            else
+                echo -e "${RED}✗ Desconectado${NC}"
+            fi
             ;;
         5)
-            check_leaks
+            nano $CONFIG_LIST
             ;;
         6)
-            [ -f "$LOG_FILE" ] && tail -20 "$LOG_FILE" || echo "No hay logs"
+            setup_killswitch
             ;;
         7)
-            echo "👋 Hasta luego!"
+            stop_vpn_connection
+            disable_killswitch
             exit 0
             ;;
     esac
     
-    read -p "Enter para continuar..."
+    read -p "Presiona Enter para continuar..."
     show_menu
 }
 
-check_leaks() {
-    echo "🔍 Verificando fugas..."
-    
-    echo "1. Verificando IP..."
-    echo "   Sin proxy:"
-    curl -s --max-time 10 ifconfig.me
-    echo ""
-    
-    echo "2. Verificando DNS..."
-    dig +short myip.opendns.com @resolver1.opendns.com
-    
-    echo "3. Verificando WebRTC (simplificado)..."
-    echo "   💡 Usa Firefox con privacy.resistFingerprinting=true"
-    
-    echo ""
-    echo "📱 Para pruebas completas, usa:"
-    echo "   https://ipleak.net"
-    echo "   https://dnsleaktest.com"
-}
-
 # ============================================
-# INICIO
+# SCRIPT DE ROTACIÓN EN PYTHON (opcional)
 # ============================================
 
-echo "🔓 VPN MANAGER - MODO SIN ROOT"
-echo "==============================="
+cat > $CONFIG_DIR/scripts/rotation.py << 'EOF'
+#!/data/data/com.termux/files/usr/bin/python3
 
-# Crear directorios
-mkdir -p ~/vpn-advanced/{scripts,logs,configs}
+import subprocess
+import time
+import random
+import os
+import sys
+import schedule
 
-show_menu
+CONFIG_DIR = os.path.expanduser("~/vpn-advanced")
+CONFIG_LIST = os.path.join(CONFIG_DIR, "lists/config_list.txt")
+
+def load_configs():
+    with open(CONFIG_LIST, 'r') as f:
+        configs = [line.strip() for line in f if line.strip()]
+    return configs
+
+def rotate_vpn():
+    configs = load_configs()
+    if not configs:
+        print("No hay configuraciones disponibles")
+        return
+    
+    new_config = random.choice(configs)
+    print(f"Rotando a: {new_config}")
+    
+    # Detener conexión actual
+    subprocess.run(["pkill", "openvpn"])
+    subprocess.run(["wg-quick", "down", "wg0"])
+    time.sleep(2)
+    
+    # Iniciar nueva conexión
+    if new_config.endswith('.ovpn'):
+        subprocess.Popen(["openvpn", "--config", new_config, "--daemon"])
+    elif new_config.endswith('.conf'):
+        subprocess.Popen(["wg-quick", "up", new_config])
+    
+    # Verificar conexión
+    time.sleep(5)
+    result = subprocess.run(["ping", "-c", "2", "9.9.9.9"], 
+                          capture_output=True)
+    if result.returncode == 0:
+        print("✓ Rotación exitosa")
+    else:
+        print("✗ Error en rotación")
+        rotate_vpn()  # Reintentar
+
+if __name__ == "__main__":
+    # Rotar cada 5 minutos
+    schedule.every(5).minutes.do(rotate_vpn)
+    
+    print("Rotador iniciado - Ctrl+C para salir")
+    try:
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\nDeteniendo rotador...")
+EOF
+
+# ============================================
+# EJECUCIÓN PRINCIPAL
+# ============================================
+
+if [ "$1" = "auto" ]; then
+    init_directories
+    setup_killswitch
+    configure_dns
+    start_shadowsocks
+    monitor_connection
+else
+    init_directories
+    show_menu
+fi
